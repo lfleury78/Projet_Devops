@@ -3,11 +3,46 @@ package devops.projet_devops.service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Optional;
 
+import devops.projet_devops.model.Order;
+import devops.projet_devops.repository.OrderRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OrderService {
+
+    private final OrderRepository orderRepository;
+
+    public OrderService(OrderRepository orderRepository) {
+        this.orderRepository = orderRepository;
+    }
+
+    public List<Order> findAll() {
+        return orderRepository.findAll();
+    }
+
+    public Optional<Order> findById(Long id) {
+        return orderRepository.findById(id);
+    }
+
+    public List<Order> findByUserId(Long userId) {
+        return orderRepository.findByUserId(userId);
+    }
+
+    @Transactional
+    public Order save(Order order) {
+        BigDecimal discountedTotal = applyDiscount(order.getTotal(), order.getDiscountPercent());
+        order.setTotal(discountedTotal);
+        order.setDeliveryDays(estimateDeliveryDays(order.isPriority(), order.getItemCount()));
+        return orderRepository.save(order);
+    }
+
+    @Transactional
+    public void deleteById(Long id) {
+        orderRepository.deleteById(id);
+    }
 
     public BigDecimal calculateTotal(List<BigDecimal> prices) {
         if (prices == null || prices.isEmpty()) {
