@@ -1,1 +1,52 @@
+# Projet_Devops
 
+Projet Maven multi-modules composé de deux micro-services Spring Boot :
+
+```
+Projet_Devops/
+├── pom.xml                 # POM parent (modules, JaCoCo)
+├── docker-compose.yml      # lance les deux services
+├── order-service/          # utilisateurs + commandes (port 8080)
+│   ├── Dockerfile
+│   └── src/
+├── stock-service/          # gestion des stocks (port 8081)
+│   ├── Dockerfile
+│   └── src/
+├── sonar-project.properties
+└── .github/workflows/maven.yml
+```
+
+## Fonctionnement
+
+À la création d'une commande (`POST /api/orders`) contenant un `productId`, `order-service`
+appelle `stock-service` (`POST /api/stock/products/{id}/reserve?quantity={itemCount}`) :
+
+- stock suffisant : le stock est décrémenté et la commande est enregistrée ;
+- stock insuffisant : `409 Conflict`, la commande n'est pas créée ;
+- produit inconnu : `404` ; `stock-service` injoignable : `503` ;
+- si l'enregistrement de la commande échoue après la réservation, le stock est remis (`/restock`).
+
+Sans `productId`, la commande se comporte comme avant (aucun appel au stock).
+Les mises à jour (`PUT`) ne re-réservent pas de stock.
+
+## API stock-service (`/api/stock/products`)
+
+| Méthode | URL | Description |
+|---------|-----|-------------|
+| GET | `/` , `/{id}` | liste / détail des produits |
+| POST | `/` | crée un produit `{"name":"Clavier","quantity":10}` |
+| DELETE | `/{id}` | supprime un produit |
+| GET | `/{id}/availability?quantity=n` | stock suffisant ? |
+| POST | `/{id}/reserve?quantity=n` | décrémente le stock |
+| POST | `/{id}/restock?quantity=n` | incrémente le stock |
+
+## Commandes utiles
+
+```
+mvn -B verify                       # build + tests des deux services
+mvn -B test -pl stock-service       # un seul service
+docker compose up --build           # après `mvn package`
+```
+
+`order-service` lit l'URL du stock via `stock.service.url` (variable `STOCK_SERVICE_URL`,
+défaut `http://localhost:8081`).

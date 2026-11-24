@@ -1,10 +1,4 @@
-# This workflow will build a Java project with Maven, and cache/restore any dependencies to improve the workflow execution time
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-maven
-
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
+# Build, tests, couverture et analyse Sonar des micro-services (order-service, stock-service).
 name: Java CI with Maven
 
 on:
@@ -15,8 +9,16 @@ on:
 
 jobs:
   unit-tests:
-    name: Unit Tests (Services)
+    name: Unit Tests (${{ matrix.service }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: order-service
+            tests: "UserServiceTest,OrderServiceTest,StockClientTest"
+          - service: stock-service
+            tests: "StockServiceTest"
 
     steps:
       - uses: actions/checkout@v4
@@ -29,18 +31,26 @@ jobs:
           cache: maven
 
       - name: Run unit tests
-        run: mvn -B test -pl . -Dtest="UserServiceTest,OrderServiceTest" --file pom.xml
+        run: mvn -B test -pl ${{ matrix.service }} -Dtest="${{ matrix.tests }}" -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: Upload unit test report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: unit-test-report
-          path: target/surefire-reports/
+          name: unit-test-report-${{ matrix.service }}
+          path: ${{ matrix.service }}/target/surefire-reports/
 
   web-tests:
-    name: Web Tests (Controllers)
+    name: Web Tests (${{ matrix.service }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: order-service
+            tests: "UserControllerTest,OrderControllerTest"
+          - service: stock-service
+            tests: "StockControllerTest"
 
     steps:
       - uses: actions/checkout@v4
@@ -53,14 +63,14 @@ jobs:
           cache: maven
 
       - name: Run web (MockMvc) tests
-        run: mvn -B test -pl . -Dtest="UserControllerTest,OrderControllerTest" --file pom.xml
+        run: mvn -B test -pl ${{ matrix.service }} -Dtest="${{ matrix.tests }}" -Dsurefire.failIfNoSpecifiedTests=false
 
       - name: Upload web test report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: web-test-report
-          path: target/surefire-reports/
+          name: web-test-report-${{ matrix.service }}
+          path: ${{ matrix.service }}/target/surefire-reports/
 
   build:
     name: Full Build & Package
@@ -77,22 +87,36 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Build and run all tests
+      - name: Build and run all tests (all modules)
         run: mvn -B verify --file pom.xml
 
-      - name: Upload JAR artifact
+      - name: Upload order-service JAR
         uses: actions/upload-artifact@v4
         with:
-          name: app-jar
-          path: target/*.jar
+          name: order-service-jar
+          path: order-service/target/*.jar
           if-no-files-found: warn
 
-      - name: Upload JaCoCo coverage report
+      - name: Upload stock-service JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: stock-service-jar
+          path: stock-service/target/*.jar
+          if-no-files-found: warn
+
+      - name: Upload JaCoCo coverage reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: jacoco-report
-          path: target/site/jacoco/
+          path: |
+            order-service/target/site/jacoco/
+            stock-service/target/site/jacoco/
+
+      - name: Build Docker images
+        run: |
+          docker build -t order-service:ci order-service
+          docker build -t stock-service:ci stock-service
 
       - name: SonarCloud Scan
         uses: sonarsource/sonarcloud-github-action@master
