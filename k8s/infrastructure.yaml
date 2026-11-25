@@ -1,0 +1,16 @@
+# Ingress Gateway Istio : point d'entrée unique du cluster.
+# (Pas de base PostgreSQL ici : les deux services utilisent H2 en mémoire.)
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: microservice-gateway
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*"

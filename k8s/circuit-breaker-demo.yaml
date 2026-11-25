@@ -1,0 +1,20 @@
+# Variante de démonstration : limites volontairement très basses pour voir le circuit
+# s'ouvrir (503) en lançant ./scripts/load.sh. À supprimer avec `kubectl delete -f`.
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: stock-service
+spec:
+  host: stock-service.default.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 1
+      http:
+        http1MaxPendingRequests: 1
+        maxRequestsPerConnection: 1
+    outlierDetection:
+      consecutive5xxErrors: 1
+      interval: 1s
+      baseEjectionTime: 3m
+      maxEjectionPercent: 100

@@ -1,0 +1,55 @@
+# Inspiré de servicemesh/.github/workflows/actions.yml :
+# build des images, déploiement sur un cluster minikube éphémère et test de bout en bout.
+name: Deploy to minikube
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    name: Build and deploy to minikube
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Start Kubernetes minikube
+        uses: medyagh/setup-minikube@latest
+
+      - name: Build JARs and Docker images inside minikube
+        run: |
+          mvn -B -DskipTests package
+          eval $(minikube -p minikube docker-env)
+          docker build -t local/stock-service stock-service
+          docker build -t local/order-service order-service
+
+      - name: Deploy to minikube
+        run: kubectl apply -f k8s/deployment-ci.yaml
+
+      - name: Wait for pods
+        run: |
+          kubectl wait --for=condition=Ready --timeout=180s pod -l app=stock-service
+          kubectl wait --for=condition=Ready --timeout=180s pod -l app=order-service
+          kubectl get pods
+
+      - name: Smoke test (stock then order through the cluster)
+        run: |
+          URL=$(minikube service order-service --url)
+          for i in 1 2 3 4; do curl -fs $URL/actuator/health && break || sleep 5; done
+          kubectl port-forward svc/stock-service 8081:8081 &
+          sleep 3
+          curl -fs -H "Content-Type: application/json" -X POST \
+            -d '{"name":"Clavier","quantity":10}' http://localhost:8081/api/stock/products
+
+      - name: Log pods
+        if: always()
+        run: |
+          kubectl logs -l app=order-service --tail=100
+          kubectl logs -l app=stock-service --tail=100
